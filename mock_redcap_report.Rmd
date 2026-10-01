@@ -1,0 +1,116 @@
+---
+page_title: "mock_redcap_report"
+output: html_document
+---
+
+
+```{r setup, include = FALSE}
+
+knitr::opts_chunk$set(
+  echo = TRUE,    # Hide the source code by default in the output
+  warning = FALSE, # Hide warnings
+  message = FALSE, # Hide system messages
+  fig.width = 8,   # Default figure width in inches
+  fig.height = 6   # Default figure height in inches
+)
+
+# Set global R options if needed
+options(digits = 3) 
+
+library(tidyverse)
+library(gtsummary)
+library(gt)
+
+```
+
+
+# Quality of Life and Chronic Disease    
+
+## REDCap Data Summary  
+
+```{r}
+redcap_subjects <- read_csv("data/mock_redcap_subjects.csv")
+redcap_subjects %>%
+  gt::gt_preview()
+
+redcap_visits <- read_csv("data/mock_redcap_visits.csv")
+redcap_visits %>%
+  gt::gt_preview()
+
+```
+
+We have enrolled `r nrow(redcap_subjects)` participants, and we have captured `r nrow(redcap_visits)` follow-up visits among participants.
+
+
+## Quality of Life Measured Among Participants  
+
+We have measured quality of life across all participants and visits:
+
+```{r}
+redcap_visits %>%
+  ggplot(data = .) +
+  geom_histogram(aes(x = measured_QOL), binwidth = 1, fill = "white", color = "red", alpha = 0.5)
+
+```
+
+
+## Subject Demographics  
+
+```{r}
+
+redcap_subjects %>%
+  mutate(age_years = lubridate::time_length(interval(enrollment_date, birth_date), "years")) %>%
+  select(rural_residence, age_years, smoker, diabetes_mellitus, cad, copd) %>%
+  gtsummary::tbl_summary(data = ., by = rural_residence) %>%
+  gtsummary::add_overall() %>%
+  gtsummary::add_p() %>%
+  gtsummary::modify_spanning_header(gtsummary::all_stat_cols() ~ "**Rural Residence**")
+
+
+```
+
+
+## Association Between Quality-of-Life Outcome & Exposures of Interest  
+
+- We used boxplots to assess the association between measured QOL and rural residence:  
+
+```{r}
+redcap_subjects %>%
+  left_join(redcap_visits, by = "subject_id") %>% 
+  ggplot(data = .) +
+  geom_boxplot(aes(x = rural_residence, y = measured_QOL, fill = rural_residence))
+
+```
+
+- Smoking may influence this association:  
+
+```{r}
+
+redcap_subjects %>%
+  left_join(redcap_visits, by = "subject_id") %>% 
+  ggplot(data = .) +
+  geom_boxplot(aes(x = rural_residence, y = measured_QOL, fill = rural_residence)) +
+  facet_wrap(facets = ~ smoker, labeller = label_both)
+
+```
+
+
+
+- We identified an association between visit frequency and quality of life: 
+
+```{r}
+redcap_subjects %>%
+  full_join(redcap_visits, by = "subject_id") %>% 
+  group_by(subject_id) %>%
+  summarise(n_visits = n(),
+            median_QOL = median(measured_QOL, na.rm = TRUE),
+            rural_residence = unique(rural_residence),
+            smoker = unique(smoker)) %>%
+  ggplot(data = .) +
+  geom_point(aes(x = median_QOL, y = n_visits, color = rural_residence)) +
+  geom_smooth(method = "lm", aes(x = median_QOL, y = n_visits, color = rural_residence)) +
+  facet_wrap(facets = ~ smoker, labeller = label_both)
+
+
+```
+
